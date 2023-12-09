@@ -1,72 +1,135 @@
-from PIL import Image
+import cv2
+import argparse
+import os
 
-# Function to hide a text message in an image using LSB steganography
-def hide_text_in_image(input_image_path, output_image_path, message):
-    try:
-        # Open the image
-        image = Image.open(input_image_path)
+parser = argparse.ArgumentParser(description='A utility for image steganography.')
+parser.add_argument('image_path', type=str, help='The source image path')
+parser.add_argument('mode', choices=['enc', 'dec'], help="the desired mode")
+parser.add_argument('-m', type =str, help='The message to embed')
+parser.add_argument('-textIn', type =str, help='The message to embed')
+parser.add_argument('--imgOut', type=str, help='Destination image path, if null the image will be overwritten')
+parser.add_argument('--textOut', help="path for textfile, if not present it will be printed")
 
-        # Convert the message to binary
-        binary_message = ''.join(format(ord(char), '08b') for char in message)
+args = parser.parse_args()
 
-        if len(binary_message) > (image.width * image.height * 3):
-            raise ValueError("Message is too large to hide in the image")
+print(args)
 
-        data_index = 0
+def path_check(path, png = False):
+    if os.path.exists(path):
+        if os.path.isfile(path):
+            if png:
+                if path.endswith(".png"):
+                    return True
+                else:
+                    return False
+            return True
+    return False
 
-        # Iterate through the image pixels
-        for x in range(image.width):
-            for y in range(image.height):
-                pixel = list(image.getpixel((x, y)))
+def text_to_binary(message):
+    return ''.join(format(ord(char), '08b') for char in message)
 
-                # Iterate through the RGB channels (3 channels per pixel)
-                for color_channel in range(3):
-                    if data_index < len(binary_message):
-                        pixel[color_channel] = pixel[color_channel] & ~1 | int(binary_message[data_index])
-                        data_index += 1
+def embedMessageInImage(image, message):
+    index = 0
+    message += "".zfill(8)
+    if(len(message) > height*width*channels):
+        print("Impossible to embed the message")
+    for x in range(width):
+        for y in range(height):
+            pixel = image[y, x]
+            for channel in range(channels):
+                if(index < len(message)):
+                    pixel[channel] = pixel[channel] & ~1 | int(message[index])
+                    index += 1
+    return image
 
-                image.putpixel((x, y), tuple(pixel))
+def extract_message(image):
+    message = ""
+    char = ""
+    message_retrieved = False
+    for x in range(width):
+        if(message_retrieved): 
+            break
+        for y in range(height):
+            pixel = image[y, x]
+            for channel in range(channels):
+                LSB = bin(pixel[channel])[2:].zfill(8)[7]
+                char += LSB
+                if len(char) % 8 == 0:
+                    newChar = chr(int(char, 2))
+                    char = ""
+                    if(newChar == '\0'):
+                        print("message retrieved")
+                        return message
+                    else:
+                        message += newChar
 
-        # Save the modified image with the hidden message
-        image.save(output_image_path)
-        print("Message hidden successfully.")
-    
-    except Exception as e:
-        print(f"Error: {e}")
+if(path_check(args.image_path, True)):
+    image = cv2.imread(args.image_path)
+    cv2.imshow('image',image)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+    height, width, channels = image.shape
+else:
+    raise ValueError("Invalid image path: " + args.image_path)
 
-# Function to extract the hidden text from an image
-def extract_text_from_image(image_path):
-    try:
-        image = Image.open(image_path)
+if(args.m != None):
+    message = args.m
+else:
+    if(args.textIn != None and path_check(args.textIn)):
+        file_path = args.textIn
+        with open(file_path, 'r') as file:
+            message = file.read()
+    elif (args.mode == 'enc'):
+        raise ValueError("No valid message provided " + args.image_path)
 
-        binary_message = ""
-        data_index = 0
+if(args.mode == 'enc'):
+    binMessage = text_to_binary(message)
+    resultImage = embedMessageInImage(image, binMessage)
+    if(args.imgOut ==  None or (not path_check(args.imgOut, True))):
+        cv2.imwrite(args.image_path, image)
+    else:
+        cv2.imwrite(args.imgOut, image)
+    print("Converted")
+else:
+    extracted_message = extract_message(image)
+    if(args.textOut != None and path_check(args.textOut)):
+        with open(args.textOut, "w") as file:
+            file.write(extracted_message)
+    else:
+        print(extracted_message)
 
-        for x in range(image.width):
-            for y in range(image.height):
-                pixel = list(image.getpixel((x, y))
 
-                for color_channel in range(3):
-                    binary_message += str(pixel[color_channel] & 1)
-                    data_index += 1
+"""
+usage: steganography_tool.py [-h] [-m {lsb,dcs}] [-d DATA] [-o OUTPUT] {encode,decode} image
 
-                    if data_index % 8 == 0:
-                        char = chr(int(binary_message, 2))
-                        if char == '\0':  # Null character marks the end of the message
-                            print("Message extracted successfully.")
-                            return
-                        print(char, end="")
+Steganography tool for PNG images.
 
-    except Exception as e:
-        print(f"Error: {e}")
+positional arguments:
+  {encode,decode}       Action to perform: encode or decode
+  image                 Path to the input PNG image file
 
-# Example usage
-input_image_path = 'input_image.png'
-output_image_path = 'output_image.png'
-message_to_hide = "Hello, this is a hidden message!"
+optional arguments:
+  -h, --help            show this help message and exit
+  -m {lsb,dcs}, --method {lsb,dcs}
+                        Steganography method to use (default: lsb)
+  -d DATA, --data DATA  Path to the file containing data to be encoded (required for encode)
+  -o OUTPUT, --output OUTPUT
+                        Path to the output PNG image file after encoding (required for encode)
+  -i MESSAGE, --message MESSAGE
+                        Message to be encoded directly from the command line (required for encode if data file is not provided)
 
-# Hide the message in the image
-hide_text_in_image(input_image_path, output_image_path, message_to_hide)
-
-# Extract the hidden message from the image
-extract_text_from_image(output_image_path)
+    if args.action == 'encode':
+        if not args.data and not args.message:
+            parser.error("For encoding, either data file (-d) or message input (-i) is required.")
+        if args.data and args.message:
+            parser.error("Specify either data file (-d) or message input (-i), not both.")
+        if args.data:
+            encode(args.image, args.data, args.output, args.method)
+            print("Encoding complete. Output saved to", args.output)
+        else:
+            encode(args.image, args.message, args.output, args.method)
+            print("Encoding complete. Output saved to", args.output)
+    elif args.action == 'decode':
+        decode(args.image, args.method)
+        print("Decoding complete.")
+"""

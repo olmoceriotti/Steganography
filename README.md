@@ -2,7 +2,8 @@
 
 ## Currently supported formats
 
+1.PNG\
+
 ## Format under development
 
-1.PNG\
 2.BMP
