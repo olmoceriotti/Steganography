@@ -1,6 +1,7 @@
 """
-Bloccato su step3 e step4 del Paper A Steganographic Method Based on Pixel-Value Differencing and the Perfect Square Number
-Rivedere tutto
+[𝑛2 − 𝑛, 𝑛2 + 𝑛−2𝑚] and [𝑛2 +𝑛−2𝑚 +1,𝑛2 +𝑛−1].
+Implementare questa definzione di subrange
+Sistemare nearest perfect square
 """
 
 import cv2
@@ -8,10 +9,10 @@ from math import floor, log2
 import numpy as np
 
 def nearest_perfect_square_scalar(d):
-    for i in range(0, 16):
+    for i in range(1, 16):
         if d >= i**2 and d < (i+1)**2:
             return i if abs(d - i**2) < abs(d - (i+1)**2) else (i+1)
-    return -1
+    return 1
 nearest_perfect_square = np.vectorize(nearest_perfect_square_scalar)
 
 def secret_bits_number_scalar(n):
@@ -24,24 +25,18 @@ secret_bits_number = np.vectorize(secret_bits_number_scalar)
 def text_to_binary(message):
     return ''.join(format(ord(char), '08b') for char in message)
 
-def binary_to_dec_scalar(bin):
-    return int(bin, 2)
-binary_to_dec =  np.vectorize(binary_to_dec_scalar)
-
 def extract_bits(bin, m):
-    b = np.full(len(m), "0")
+    b = np.full(len(m), 0, dtype=int)
     for j in range(0, len(m)):
-        acc = ""
         if(bin == "Finished"):
             break
         if(len(bin) > (m[j])):
-            acc = acc + bin[:m[j]]
+            b[j] = int(bin[:m[j]], 2)
             bin = bin[m[j]:]
         else:
-            acc = acc + bin
+            b[j] = int(bin.zfill(m[j]), 2)
             bin = "Finished"
-        b[j] = acc
-    return binary_to_dec(b), bin
+    return b, bin
 
 image = cv2.imread("./file1.png")
 height, width, channels = image.shape
@@ -60,6 +55,7 @@ for x in range(0, height):
                 break
     if x % 2 == 0:
         for y in range(0 + offset, width, 2):
+            print(f"X, Y: {x}, {y}")
             offset = 0
             pixel1 = image[x, y]
             i += 1
@@ -87,12 +83,15 @@ for x in range(0, height):
             print(f"Bin: {bin}")
             if(bin == "Finished"):
                 break
-            l1 = n-1 * n
+            l1 = np.where(n > 1, n * (n - 1), 1)
             d1 = l1 + b
             print(f"l1: {l1}")
             print(f"d1: {d1}")
+            print(f"Perfectsquare: {nearest_perfect_square(d1)}")
+            print(n==nearest_perfect_square(d1))
     else:
         for y in range(width -1 - offset, -1, -2):
+            print(f"X, Y: {x}, {y}")
             offset = 0
             pixel1 = image[x, y]
             i += 1
@@ -108,12 +107,20 @@ for x in range(0, height):
                 break
 
             distance = np.abs(pixel2.astype(int)-pixel1.astype(int))
+            print(f"Distance: {distance}")
             d.append(distance)
             n = nearest_perfect_square(distance)
+            print(f"N: {n}")
             m = secret_bits_number(n)
-
+            print(f"M: {m}")
+            print(f"Bin: {bin}")
             b, bin = extract_bits(bin, m)
-            
+            print(f"b: {b}")
+            print(f"Bin: {bin}")
+            if(bin == "Finished"):
+                break
             l1 = n-1 * n
             d1 = l1 + b
-            print(f"{distance} = {d1}")
+            print(f"l1: {l1}")
+            print(f"d1: {d1}")
+            print(n==nearest_perfect_square(d1))
