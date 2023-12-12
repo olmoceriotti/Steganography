@@ -35,13 +35,13 @@ def embed_values(distance, binary):
         if n < 16:
             m = int(np.floor(np.log2(n * 2)))
             l = n * (n-1)
-            u = n * (n+1) - 2**m
+            u = (n**2 +n) - 2**m
             if distance[i] < u:
                 b, binary_temp = extract_bits_scalar(binary, m + 1)
                 b = "{0:b}".format(b).zfill(m + 1)
-                print("Double")
+                
                 for j in range(l, u):
-                    print(str(j) + ": " + "{0:b}".format(j) + " && " + "{0:b}".format(int(2**(m + 1) -1)) + " && " + b + "===" + str(j & int(2**(m + 1) - 1)))
+                    #print(str(j) + ": " + "{0:b}".format(j) + " & mask: " + "{0:b}".format(int(2**(m + 1) -1)) + " && " + b + " bitwise &:" + "{0:b}".format(j & int(2**(m + 1) - 1)))
                     if ("{0:b}".format(j & int((2**(m + 1)) - 1)).zfill(m) == b):
                         binary = binary_temp
                         m_container[i] = int(m+1) 
@@ -51,9 +51,9 @@ def embed_values(distance, binary):
             if not next:
                 b, binary_temp = extract_bits_scalar(binary, m)
                 b = "{0:b}".format(b).zfill(m)
-                print("Single")
-                for j in range(l, n*(n+1)): #Manca -1?
-                    print(str(j) + ": " + "{0:b}".format(j) + " && " + "{0:b}".format(int(2**(m) -1)) + " && " + b + "===" + str(j & int(2**(m) - 1)))
+                
+                for j in range(u, n*(n+1)): #Manca -1?
+                    #print(str(j) + ": " + "{0:b}".format(j) + " & mask: " + "{0:b}".format(int(2**(m) -1)) + " && " + b +  " bitwise &: " + "{0:b}".format(j & int(2**(m) - 1)))
                     if ("{0:b}".format(j & int((2**m)-1)).zfill(m) == b):
                             binary = binary_temp
                             m_container[i] = int(m) 
@@ -96,13 +96,9 @@ def extract_bits(bin, m):
     return b, bin
 
 def embed_in_pixels(pixel1 , pixel2, binary):
-    d = np.abs(pixel2.astype(int)-pixel1.astype(int)) #np array
-    _, d1, binary = embed_values(d, binary) #np array --> (np array, np array, string)
-    print(f"d: {d}")
-    print(f"d1: {d1}")
+    d = np.abs(pixel2.astype(int)-pixel1.astype(int))
+    _, d1, binary = embed_values(d, binary)
     pixel1, pixel2 = new_pixels(pixel1, pixel2, d, d1)
-    pixel1 = pixel1
-    pixel2 = pixel2
     return pixel1, pixel2, binary
 
 def new_pixels_single_channel(pixel1, pixel2, d, d1):
@@ -126,13 +122,107 @@ def new_pixels_single_channel(pixel1, pixel2, d, d1):
 
 new_pixels = np.vectorize(new_pixels_single_channel)
 
+def extraction(image):
+    height, width, _ = image.shape
+    i = 0
+    offset = 0
+    acc = ""
+    acc2 = "" 
+    result = ""
+    finished = False
+    for x in range(0, height):
+        if x % 2 == 0:
+            for y in range(0 + offset, width, 2):
+                offset = 0
+                pixel1 = image[x, y]
+                i += 1
+                if y + 1 < width:
+                    pixel2 = image[x, y + 1]
+                    i += 1
+                elif x + 1 < height:
+                    pixel2 = image[x + 1, y]
+                    offset = 1
+                    i += 1
+                else:
+                    print("Reached end")
+                    break
+        
+                #acc_array = extract_from_pixels(pixel1, pixel2)
+                for i in range(0, len(pixel1)):
+                    sub = extract_from_pixels_scalar(pixel1[i], pixel2[i])
+                    acc = acc + sub
+                    acc2 = acc2 + sub
+                while len(acc) >= 8:
+                    int_char = int(acc[:8], 2)
+                    acc = acc[8:]
+                    result = result + chr(int_char)
+                    if int_char == 0:
+                        finished = True
+                        break
+                if finished:
+                    break            
+            if finished:
+                break
+        else:
+            for y in range(width -1 - offset, -1, -2):
+                offset = 0
+                pixel1 = image[x, y]
+                i += 1
+                if y - 1 >= 0:
+                    pixel2 = image[x, y - 1]
+                    i += 1
+                elif x + 1 < height:
+                    pixel2 = image[x + 1, y]
+                    offset = 1
+                    i += 1
+                else:
+                    break
+                
+                for i in range(0, len(pixel1)):
+                    sub = extract_from_pixels_scalar(pixel1[i], pixel2[i])
+                    acc = acc + sub
+                    acc2 = acc2 + sub
+                while len(acc) >= 8:
+                    int_char = int(acc[:8], 2)
+                    acc = acc[8:]
+                    result = result + chr(int_char)
+                    if int_char == 0:
+                        finished = True
+                        break
+                if finished:
+                    break            
+            if finished:
+                break
+        if finished:
+            break
+    if finished:
+        print("Message retrieved successfully")
+    return result[:len(result) - 1]
 
-image = cv2.imread("./file1.png")
+def extract_from_pixels_scalar(pixel1, pixel2):
+    d1 = np.abs(int(pixel2)-int(pixel1))
+    n = nearest_perfect_square_scalar(d1)
+    acc = ""
+    if(d1 >= 240):
+        acc = acc + bin(d1 & ((1 << 4) - 1))[2:].zfill(4)
+    else:
+        m = int(np.floor(np.log2(2 * n)))
+        if ((n**2+n) - (n**2 -n)) > 2**m and d1 < ((n**2)+n) - (2**m):
+            acc = acc + bin(d1 & ((1 << (m+1)) - 1))[2:].zfill(m+1)
+        else:
+            acc = acc + bin(d1 & ((1 << m) - 1))[2:].zfill(m)
+    return acc
+
+extract_from_pixels = np.vectorize(extract_from_pixels_scalar)
+
+
+image = cv2.imread("./file9.png")
 height, width, channels = image.shape
 
-message = "messaggio"
-binary = text_to_binary(message)
+message = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 print(f"Message: {message}")
+message = message + '\0'
+binary = text_to_binary(message)
 print(f"Message bin: {binary}")
 i = 0
 offset = 0
@@ -143,9 +233,11 @@ for x in range(0, height):
                 break
     if x % 2 == 0:
         for y in range(0 + offset, width, 2):
-            print(f"x: {x}, y: {y}")
+            if(binary == "Finished"):
+                break
             offset = 0
             pixel1 = image[x, y]
+            print(pixel1)
             i += 1
             if y + 1 < width:
                 pixel2 = image[x, y + 1]
@@ -155,11 +247,11 @@ for x in range(0, height):
                 offset = 1
                 i += 1
             else:
-                print("Reached end")
+                print("Error: Reached end")
                 break
 
-            pixel1, pixel2, binary = embed_in_pixels(pixel1, pixel2, binary)            
-
+            pixel1, pixel2, binary = embed_in_pixels(pixel1, pixel2, binary)  
+            print(pixel1)         
             image[x, y] = pixel1
             if y + 1 < width:
                 image[x, y + 1] = pixel2
@@ -167,6 +259,8 @@ for x in range(0, height):
                 image[x + 1, y] = pixel2
     else:
         for y in range(width -1 - offset, -1, -2):
+            if(binary == "Finished"):
+                break
             offset = 0
             pixel1 = image[x, y]
             i += 1
@@ -178,7 +272,7 @@ for x in range(0, height):
                 offset = 1
                 i += 1
             else:
-                print("Reached end")
+                print("Error: Reached end")
                 break
             
             pixel1, pixel2, binary = embed_in_pixels(pixel1, pixel2, binary)
@@ -190,6 +284,11 @@ for x in range(0, height):
                 image[x + 1, y] = pixel2
 
 
+
 cv2.imshow('Image', image)
 cv2.waitKey(0)
 cv2.destroyAllWindows()
+cv2.imwrite("file10.png", image)
+
+image2 = cv2.imread("./file10.png")
+print(f"Extracted the string: {extraction(image2)}")
